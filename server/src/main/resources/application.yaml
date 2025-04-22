@@ -1,8 +1,0 @@
-registry:
-  center:
-    url: http://localhost:8080
-spring:
-  application:
-    name: job
-server:
-  port: 8081
