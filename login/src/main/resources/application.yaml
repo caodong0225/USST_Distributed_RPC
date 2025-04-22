@@ -1,0 +1,18 @@
+registry:
+  center:
+    url: http://localhost:8080
+spring:
+  application:
+    name: job
+  # 数据库连接配置
+  datasource:
+    # MySQL数据库驱动类，建议使用最新版本以确保兼容性
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # 数据库用户名，用于登录数据库
+    username: root
+    # 数据库密码，需妥善保管避免泄露
+    password: 123456
+    # 数据库连接URL，包含数据库地址、端口、库名、时区及字符编码设置
+    url: jdbc:mysql://localhost:3306/jobs?serverTimezone=UTC&useUnicode=true&characterEncoding=utf-8
+server:
+  port: 8081
