@@ -1,5 +1,8 @@
 package top.caodong0225.protocol;
 
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.apache.catalina.*;
 import org.apache.catalina.connector.Connector;
 import org.apache.catalina.core.StandardContext;
@@ -44,6 +47,18 @@ public class RegistrationCenterServer {
         engine.addChild(host);
         service.setContainer(engine);
         service.addConnector(connector);
+
+        tomcat.addServlet(contextPath, "optionsServlet", new HttpServlet() {
+            @Override
+            protected void doOptions(HttpServletRequest req, HttpServletResponse resp) {
+                resp.setHeader("Access-Control-Allow-Origin", "*");
+                resp.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+                resp.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+                resp.setHeader("Access-Control-Max-Age", "3600");
+                resp.setStatus(HttpServletResponse.SC_OK);
+            }
+        });
+        context.addServletMappingDecoded("/*", "optionsServlet");
 
         tomcat.addServlet(contextPath, "unregisterServlet", new UnregisterServlet());
         context.addServletMappingDecoded("/unregister/*", "unregisterServlet");

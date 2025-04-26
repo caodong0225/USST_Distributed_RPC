@@ -97,7 +97,9 @@ public class RegisterServlet extends HttpServlet {
         Transaction tx = jedis.multi();
         tx.hmset(instanceKey, instanceData);
         tx.expire(instanceKey, 90);  // 设置90秒过期时间
+        // 设置过期时间
         tx.sadd(serviceKey, instanceKey);
+        tx.expire(serviceKey, 600);
         tx.exec();
     }
 

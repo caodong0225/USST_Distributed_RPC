@@ -56,10 +56,10 @@ public class HealthChecker implements Runnable {
         for (String instanceKey : instanceKeys) {
             executor.submit(() -> {
                 try {
-                    // 1. 从Redis获取实例详情
-                    Map<String, String> instance = jedis.hgetAll(instanceKey);
-                    String host = instance.get("hostname");
-                    String port = instance.get("port");
+                    String[] keySplit = instanceKey.split(":");
+                    // 取最后两个作为ip地址和端口
+                    String host = keySplit[keySplit.length - 2];
+                    String port = keySplit[keySplit.length - 1];
                     String path = "/health";
 
                     // 2. 构建健康检查URL
@@ -67,11 +67,10 @@ public class HealthChecker implements Runnable {
 
                     // 3. 发送HTTP请求
                     boolean isHealthy = checkHealth(healthUrl);
-
                     updateInstanceStatus(jedis, instanceKey,serviceKey, isHealthy);
 
                 } catch (Exception e) {
-                    log.warn("Health check failed for {}", instanceKey, e);
+                    System.out.println("Health check failed"+e);
                 }
             });
         }
@@ -110,9 +109,18 @@ public class HealthChecker implements Runnable {
             if (healthy) {
                 // 健康时：更新心跳时间并重置失败计数
                 Transaction tx = jedis.multi();
+                String[] keySplit = instanceKey.split(":");
+                // 取最后两个作为ip地址和端口
+                String hostname = keySplit[keySplit.length - 2];
+                String port = keySplit[keySplit.length - 1];
+
+                // 同时更新当前ip地址和端口
+                tx.hset(instanceKey, "hostname", hostname);
+                tx.hset(instanceKey, "port", port);
                 tx.hset(instanceKey, "lastHeartbeat", String.valueOf(System.currentTimeMillis()));
                 // 同时延长时间
                 tx.expire(instanceKey, 90);
+                tx.expire(serviceKey, 600);
                 tx.del(failureKey); // 清除失败计数
                 tx.exec();
             } else {

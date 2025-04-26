@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="top.caodong0225.jobs_server.mapper.JobsMapper">
+
+    <!-- 定义 JobsVO 的 ResultMap -->
+    <resultMap id="JobsVOResultMap" type="top.caodong0225.jobs_server.vo.JobsVO">
+        <!-- 映射 Jobs 表字段 -->
+        <id property="id" column="id"/>
+        <result property="name" column="name"/>
+        <result property="salary" column="salary"/>
+        <result property="description" column="description"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="status" column="status"/>
+
+        <!-- 嵌套用户对象 -->
+        <association property="user" javaType="top.caodong0225.jobs_server.entity.Users">
+            <id property="id" column="user_id"/>  <!-- 对应 users.id -->
+            <result property="username" column="username"/>
+            <result property="email" column="email"/>
+        </association>
+    </resultMap>
+
+    <!-- 动态查询方法 -->
+    <select id="getJobsList" resultMap="JobsVOResultMap">
+        SELECT
+        j.id,
+        j.name,
+        j.salary,
+        j.description,
+        j.created_at,
+        j.updated_at,
+        j.status,
+        u.id AS user_id,  <!-- 别名对应 UserDTO.userId -->
+        u.username,
+        u.email
+        FROM
+        jobs j
+        LEFT JOIN
+        users u ON j.user_id = u.id
+        <where>
+            <!-- 原有动态条件 -->
+            <if test="userId != null">
+                AND j.user_id = #{userId}
+            </if>
+            <if test="status != null and status != ''">
+                AND j.status = #{status}
+            </if>
+            <if test="startTime != null and startTime != ''">
+                AND j.created_at >= #{startTime}
+            </if>
+            <if test="endTime != null and endTime != ''">
+                AND j.created_at &lt;= #{endTime}
+            </if>
+            <if test="name != null and name != ''">
+                AND j.name LIKE CONCAT('%', #{name}, '%')
+            </if>
+            <if test="salaryDown != null and salaryDown != ''">
+                AND j.salary  >= #{salaryDown}
+            </if>
+            <if test="salaryUp != null and salaryUp != ''">
+                AND j.salary &lt;= #{salaryUp}
+            </if>
+        </where>
+        ORDER BY j.created_at DESC
+    </select>
+</mapper>
