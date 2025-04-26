@@ -5,16 +5,19 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.apache.commons.io.output.ByteArrayOutputStream;
-import org.apache.http.Header;
+import org.apache.commons.io.IOUtils;
+import org.apache.http.*;
 import org.apache.http.client.methods.*;
-import org.apache.http.entity.ByteArrayEntity;
+import org.apache.http.entity.InputStreamEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicHeader;
+import org.apache.http.util.EntityUtils;
 import redis.clients.jedis.Jedis;
 import top.caodong0225.protocol.RedisClient;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.*;
 
 public class ProxyServlet extends HttpServlet {
@@ -43,8 +46,8 @@ public class ProxyServlet extends HttpServlet {
             return;
         }
 
-        // 3. 构建目标URL
-        String fullUrl = targetUrl + targetPath;
+        // 3. 构建完整目标URL
+        String fullUrl = targetUrl + targetPath + (req.getQueryString() != null ? "?" + req.getQueryString() : "");
 
         // 4. 转发请求（带重试机制）
         boolean success = forwardWithRetry(req, resp, fullUrl);
@@ -60,29 +63,30 @@ public class ProxyServlet extends HttpServlet {
             return null;
         }
 
+        // 处理形如 /serviceName/rest/of/path 的路径
         String[] parts = pathInfo.substring(1).split("/", 2);
-        if (parts.length < 2) {
+        if (parts.length < 1) {
             return null;
         }
 
-        return new String[]{parts[0], "/" + parts[1]};
+        String serviceName = parts[0];
+        String targetPath = parts.length > 1 ? "/" + parts[1] : "/";
+        return new String[]{serviceName, targetPath};
     }
 
     private String discoverService(String serviceName, HttpServletRequest req) {
         try (Jedis jedis = RedisClient.getInstance().getJedis()) {
-            // 获取服务实例集合
             Set<String> instances = jedis.smembers("rpc:service:" + serviceName);
             if (instances == null || instances.isEmpty()) {
                 return null;
             }
 
-            // 负载均衡策略（示例使用随机）
+            // 随机负载均衡
             List<String> instanceList = new ArrayList<>(instances);
             String selected = instanceList.get(new Random().nextInt(instanceList.size()));
 
-            // 获取实例详情
             Map<String, String> instance = jedis.hgetAll(selected);
-            return "http://" + instance.get("hostname") + ":" + instance.get("port");
+            return String.format("http://%s:%s", instance.get("hostname"), instance.get("port"));
         }
     }
 
@@ -95,7 +99,7 @@ public class ProxyServlet extends HttpServlet {
                 return true;
             } catch (IOException e) {
                 if (i == MAX_RETRIES - 1) {
-                    System.out.println("Retry limit exceeded");
+                    System.err.println("Forward failed after " + MAX_RETRIES + " retries: " + e.getMessage());
                 }
             }
         }
@@ -105,47 +109,51 @@ public class ProxyServlet extends HttpServlet {
     private void forwardRequest(HttpServletRequest srcReq,
                                 HttpServletResponse srcResp,
                                 String targetUrl) throws IOException {
-        // 创建目标请求
-        HttpRequestBase targetReq = createTargetRequest(srcReq, targetUrl);
+        // 创建目标请求对象
+        HttpRequestBase targetRequest = createTargetRequest(srcReq, targetUrl);
 
-        // 复制请求头
+        // 复制请求头（排除 Hop-by-Hop 头）
         Enumeration<String> headerNames = srcReq.getHeaderNames();
         while (headerNames.hasMoreElements()) {
-            String name = headerNames.nextElement();
-            targetReq.setHeader(name, srcReq.getHeader(name));
+            String headerName = headerNames.nextElement();
+            if (!isHopByHopHeader(headerName)) { // 过滤不应转发的头
+                targetRequest.setHeader(headerName, srcReq.getHeader(headerName));
+            }
         }
 
-        // 复制请求体（仅对可重复读取的请求）
-        if (srcReq.getContentLength() > 0 &&
-                (srcReq.getMethod().equals("POST") ||
-                        srcReq.getMethod().equals("PUT") ||
-                        srcReq.getMethod().equals("PATCH"))) {
-
-            ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-            srcReq.getInputStream().transferTo(buffer);
-            ((HttpEntityEnclosingRequestBase)targetReq).setEntity(
-                    new ByteArrayEntity(buffer.toByteArray())
-            );
+        // 复制请求体（仅对包含实体的方法）
+        if (targetRequest instanceof HttpEntityEnclosingRequestBase) {
+            HttpEntityEnclosingRequestBase entityRequest = (HttpEntityEnclosingRequestBase) targetRequest;
+            InputStream requestBodyStream = srcReq.getInputStream();
+            entityRequest.setEntity(new InputStreamEntity(requestBodyStream, srcReq.getContentLength()));
         }
 
-        // 执行请求
-        try (CloseableHttpResponse targetResp = httpClient.execute(targetReq)) {
-            // 转发响应状态
-            srcResp.setStatus(targetResp.getStatusLine().getStatusCode());
+        // 执行请求并获取响应
+        try (CloseableHttpResponse targetResponse = httpClient.execute(targetRequest)) {
+            // 1. 转发状态码
+            srcResp.setStatus(targetResponse.getStatusLine().getStatusCode());
 
-            // 转发响应头
-            for (Header header : targetResp.getAllHeaders()) {
-                srcResp.setHeader(header.getName(), header.getValue());
+            // 2. 转发响应头（过滤 Hop-by-Hop 头）
+            Arrays.stream(targetResponse.getAllHeaders())
+                    .filter(header -> !isHopByHopHeader(header.getName()))
+                    .forEach(header -> srcResp.setHeader(header.getName(), header.getValue()));
+
+            // 3. 转发响应体
+            HttpEntity entity = targetResponse.getEntity();
+            if (entity != null) {
+                try (InputStream content = entity.getContent()) {
+                    IOUtils.copy(content, srcResp.getOutputStream());
+                }
             }
 
-            // 转发响应体
-            targetResp.getEntity().writeTo(srcResp.getOutputStream());
+            // 确保实体内容被消费
+            EntityUtils.consume(entity);
         }
     }
 
     private HttpRequestBase createTargetRequest(HttpServletRequest srcReq,
                                                 String targetUrl) {
-        String method = srcReq.getMethod();
+        String method = srcReq.getMethod().toUpperCase();
         switch (method) {
             case "GET":
                 return new HttpGet(targetUrl);
@@ -155,18 +163,33 @@ public class ProxyServlet extends HttpServlet {
                 return new HttpPut(targetUrl);
             case "DELETE":
                 return new HttpDelete(targetUrl);
+            case "PATCH":
+                return new HttpPatch(targetUrl);
+            case "HEAD":
+                return new HttpHead(targetUrl);
+            case "OPTIONS":
+                return new HttpOptions(targetUrl);
             default:
-                return new HttpGet(targetUrl);
+                throw new IllegalArgumentException("Unsupported method: " + method);
         }
+    }
+
+    private boolean isHopByHopHeader(String headerName) {
+        // RFC 2616 定义的 Hop-by-Hop 头列表
+        final Set<String> hopByHopHeaders = new HashSet<>(Arrays.asList(
+                "Connection", "Keep-Alive", "Proxy-Authenticate",
+                "Proxy-Authorization", "TE", "Trailers", "Transfer-Encoding", "Upgrade"
+        ));
+        return hopByHopHeaders.contains(headerName);
     }
 
     private void sendError(HttpServletResponse resp, int code, String msg)
             throws IOException {
         resp.setStatus(code);
+        resp.setContentType("application/json");
         Map<String, Object> error = new HashMap<>();
         error.put("code", code);
         error.put("message", msg);
         mapper.writeValue(resp.getWriter(), error);
     }
 }
-
