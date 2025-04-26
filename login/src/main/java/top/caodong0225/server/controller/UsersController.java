@@ -7,6 +7,7 @@ import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.web.bind.annotation.*;
 import top.caodong0225.server.dto.BaseResponseDTO;
 import top.caodong0225.server.dto.GeneralDataResponseDTO;
+import top.caodong0225.server.dto.UserRolesResponseDTO;
 import top.caodong0225.server.entity.UserRoles;
 import top.caodong0225.server.entity.Users;
 import top.caodong0225.server.service.IUserRolesService;
@@ -51,8 +52,6 @@ public class UsersController {
         if(user.getEmail() == null){
             return new BaseResponseDTO(400, "邮箱不能为空");
         }
-        user.setId(null);
-        user.setHash(BCrypt.hashpw(user.getHash(), BCrypt.gensalt()));
         return new BaseResponseDTO(200, usersService.addUsers(user) ? "注册成功" : "注册失败");
     }
 
@@ -72,6 +71,24 @@ public class UsersController {
             userRoles.setRole("guest");
         }
         return new GeneralDataResponseDTO<>(JWTUtil.generateToken(dbUser.getId().toString(),dbUser.getUsername(),userRoles.getRole(), dbUser.getEmail()));
+    }
+
+    @GetMapping("/{id}")
+    public GeneralDataResponseDTO<UserRolesResponseDTO> getUserById(@PathVariable("id") Integer id) {
+        Users user = usersService.getById(id);
+        if (user == null) {
+            return new GeneralDataResponseDTO<>(400, "用户不存在");
+        }
+        UserRoles userRoles = userRolesService.getUserRolesByUserId(user.getId());
+        UserRolesResponseDTO userRolesResponseDTO = new UserRolesResponseDTO();
+        userRolesResponseDTO.setId(user.getId());
+        userRolesResponseDTO.setUsername(user.getUsername());
+        userRolesResponseDTO.setEmail(user.getEmail());
+        if(userRoles != null){
+            userRolesResponseDTO.setRole(userRoles.getRole());
+        }
+        userRolesResponseDTO.setCreatedAt(user.getCreatedAt());
+        return new GeneralDataResponseDTO<>(userRolesResponseDTO);
     }
 
 }

@@ -2,6 +2,7 @@ package top.caodong0225.server.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.stereotype.Service;
 import top.caodong0225.server.entity.Users;
 import top.caodong0225.server.mapper.UsersMapper;
@@ -14,8 +15,10 @@ import top.caodong0225.server.service.IUsersService;
 public class UsersServiceImpl extends ServiceImpl<UsersMapper, Users> implements IUsersService  {
 
     @Override
-    public boolean addUsers(Users users) {
-        return this.save(users);
+    public boolean addUsers(Users user) {
+        user.setId(null);
+        user.setHash(BCrypt.hashpw(user.getHash(), BCrypt.gensalt()));
+        return this.save(user);
     }
 
     @Override
