@@ -24,7 +24,6 @@ public class Users implements Serializable {
     @NotNull
     @NotBlank
     private String username;
-    @JsonIgnore
     private String hash;
     private String email;
 }

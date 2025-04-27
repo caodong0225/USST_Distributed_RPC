@@ -7,8 +7,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.*;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.*;
-import org.apache.http.entity.InputStreamEntity;
+import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.message.BasicHeader;
@@ -21,7 +22,13 @@ import java.io.InputStream;
 import java.util.*;
 
 public class ProxyServlet extends HttpServlet {
-    private static final CloseableHttpClient httpClient = HttpClients.createDefault();
+    private static final CloseableHttpClient httpClient = HttpClients.custom()
+            .setDefaultRequestConfig(RequestConfig.custom()
+                    .setConnectTimeout(5000)    // 连接超时 5秒
+                    .setSocketTimeout(15000)    // 数据传输超时 15秒
+                    .build())
+            .disableRedirectHandling()      // 禁用自动重定向
+            .build();
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final int MAX_RETRIES = 3;
 
@@ -97,7 +104,7 @@ public class ProxyServlet extends HttpServlet {
             try {
                 forwardRequest(srcReq, srcResp, targetUrl);
                 return true;
-            } catch (IOException e) {
+            } catch (Exception e) {
                 if (i == MAX_RETRIES - 1) {
                     System.err.println("Forward failed after " + MAX_RETRIES + " retries: " + e.getMessage());
                 }
@@ -112,24 +119,35 @@ public class ProxyServlet extends HttpServlet {
         // 创建目标请求对象
         HttpRequestBase targetRequest = createTargetRequest(srcReq, targetUrl);
 
-        // 复制请求头（排除 Hop-by-Hop 头）
+        // 复制请求头（排除 Hop-by-Hop 头和 Content-Length）
         Enumeration<String> headerNames = srcReq.getHeaderNames();
         while (headerNames.hasMoreElements()) {
             String headerName = headerNames.nextElement();
-            if (!isHopByHopHeader(headerName)) { // 过滤不应转发的头
-                targetRequest.setHeader(headerName, srcReq.getHeader(headerName));
+            if (isHopByHopHeader(headerName) || "Content-Length".equalsIgnoreCase(headerName)) {
+                continue; // 跳过不需要的请求头
             }
+            targetRequest.setHeader(headerName, srcReq.getHeader(headerName));
         }
 
         // 复制请求体（仅对包含实体的方法）
         if (targetRequest instanceof HttpEntityEnclosingRequestBase) {
             HttpEntityEnclosingRequestBase entityRequest = (HttpEntityEnclosingRequestBase) targetRequest;
             InputStream requestBodyStream = srcReq.getInputStream();
-            entityRequest.setEntity(new InputStreamEntity(requestBodyStream, srcReq.getContentLength()));
+
+            // 显式设置内容类型和编码
+            String contentType = srcReq.getContentType();
+            Header contentTypeHeader = new BasicHeader("Content-Type", contentType != null ? contentType : "application/octet-stream");
+            entityRequest.setHeader(contentTypeHeader);
+
+            // 使用 ByteArrayEntity 确保完整读取请求体
+            byte[] bodyBytes = IOUtils.toByteArray(requestBodyStream);
+            entityRequest.setEntity(new ByteArrayEntity(bodyBytes));
         }
 
+
         // 执行请求并获取响应
-        try (CloseableHttpResponse targetResponse = httpClient.execute(targetRequest)) {
+        try {
+            CloseableHttpResponse targetResponse = httpClient.execute(targetRequest);
             // 1. 转发状态码
             srcResp.setStatus(targetResponse.getStatusLine().getStatusCode());
 
@@ -148,6 +166,10 @@ public class ProxyServlet extends HttpServlet {
 
             // 确保实体内容被消费
             EntityUtils.consume(entity);
+        }
+        catch (Exception e)
+        {
+            System.err.println(e.getMessage());
         }
     }
 
@@ -175,7 +197,10 @@ public class ProxyServlet extends HttpServlet {
     }
 
     private boolean isHopByHopHeader(String headerName) {
-        // RFC 2616 定义的 Hop-by-Hop 头列表
+        // 允许 Content-* 和 Host 头
+        if (headerName.startsWith("Content-") || "Host".equalsIgnoreCase(headerName)) {
+            return false;
+        }
         final Set<String> hopByHopHeaders = new HashSet<>(Arrays.asList(
                 "Connection", "Keep-Alive", "Proxy-Authenticate",
                 "Proxy-Authorization", "TE", "Trailers", "Transfer-Encoding", "Upgrade"

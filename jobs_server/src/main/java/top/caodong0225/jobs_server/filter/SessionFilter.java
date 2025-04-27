@@ -39,8 +39,13 @@ public class SessionFilter implements Filter {
                 return;
             }
             else{
-                // Token is invalid, send an error response
-                httpResponse.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid token");
+                if(httpRequest.getRequestURI().startsWith("/jobs")) {
+                    // Token is invalid, send an error response
+                    httpResponse.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid token");
+                }
+                else{
+                    chain.doFilter(httpRequest, response);
+                }
                 return;
             }
         }

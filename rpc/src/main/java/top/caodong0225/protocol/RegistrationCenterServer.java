@@ -1,5 +1,6 @@
 package top.caodong0225.protocol;
 
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -9,6 +10,8 @@ import org.apache.catalina.core.StandardContext;
 import org.apache.catalina.core.StandardEngine;
 import org.apache.catalina.core.StandardHost;
 import org.apache.catalina.startup.Tomcat;
+import org.apache.tomcat.util.descriptor.web.FilterDef;
+import org.apache.tomcat.util.descriptor.web.FilterMap;
 import top.caodong0225.common.HealthChecker;
 import top.caodong0225.servlet.*;
 
@@ -48,17 +51,19 @@ public class RegistrationCenterServer {
         service.setContainer(engine);
         service.addConnector(connector);
 
-        tomcat.addServlet(contextPath, "optionsServlet", new HttpServlet() {
-            @Override
-            protected void doOptions(HttpServletRequest req, HttpServletResponse resp) {
-                resp.setHeader("Access-Control-Allow-Origin", "*");
-                resp.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-                resp.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
-                resp.setHeader("Access-Control-Max-Age", "3600");
-                resp.setStatus(HttpServletResponse.SC_OK);
-            }
-        });
-        context.addServletMappingDecoded("/*", "optionsServlet");
+
+        // 添加 CORS 过滤器
+        FilterDef corsFilterDef = new FilterDef();
+        corsFilterDef.setFilterName("CorsFilter");
+        corsFilterDef.setFilterClass(top.caodong0225.filter.CorsFilter.class.getName());
+        context.addFilterDef(corsFilterDef);
+
+        FilterMap corsFilterMap = new FilterMap();
+        corsFilterMap.setFilterName("CorsFilter");
+        corsFilterMap.addURLPattern("/*"); // 拦截所有请求
+        corsFilterMap.setDispatcher(DispatcherType.REQUEST.name());
+        context.addFilterMap(corsFilterMap);
+
 
         tomcat.addServlet(contextPath, "unregisterServlet", new UnregisterServlet());
         context.addServletMappingDecoded("/unregister/*", "unregisterServlet");

@@ -30,23 +30,6 @@ public class UsersController {
         this.userRolesService = userRolesService;
     }
 
-    @GetMapping("/renew")
-    public BaseResponseDTO renew(HttpServletRequest request) throws JOSEException {
-        // 续签JWT token
-        Object userId = request.getSession().getAttribute("userId");
-        if (userId == null) {
-            return new BaseResponseDTO(400, "Token不能为空");
-        }
-        UserRoles userRoles = userRolesService.getUserRolesByUserId(Integer.parseInt(userId.toString()));
-        Users user = usersService.getById((Serializable) userId);
-        return new GeneralDataResponseDTO<>(JWTUtil.generateToken(
-                user.getId().toString(),
-                user.getUsername(),
-                userRoles.getRole(),
-                user.getEmail()
-        ));
-    }
-
     @PostMapping("/register")
     public BaseResponseDTO register(@Valid @RequestBody Users user) {
         if(user.getEmail() == null){
