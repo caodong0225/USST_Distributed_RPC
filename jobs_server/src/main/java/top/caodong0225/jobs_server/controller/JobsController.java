@@ -4,6 +4,7 @@ import com.github.pagehelper.PageInfo;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
+import top.caodong0225.jobs_server.dto.BaseResponseDTO;
 import top.caodong0225.jobs_server.dto.GeneralDataResponseDTO;
 import top.caodong0225.jobs_server.entity.Jobs;
 import top.caodong0225.jobs_server.service.IJobsService;
@@ -48,17 +49,20 @@ public class JobsController {
     }
 
     @PostMapping("/add")
-    public GeneralDataResponseDTO<Jobs> addJob(
+    public BaseResponseDTO addJob(
             @Valid @RequestBody Jobs job,
             HttpServletRequest request
     ) {
-        if(request.getSession().getAttribute("role") != "super-admin") {
-            return new GeneralDataResponseDTO<>(400, "没有权限");
+        if(request.getSession().getAttribute("userId") == null) {
+            throw new IllegalArgumentException("请先登录");
+        }
+        if(!"super-admin".equals(request.getSession().getAttribute("role"))) {
+            throw new IllegalArgumentException("权限不足");
         }
         job.setId(null);
         job.setCreatedAt(LocalDateTime.now());
         job.setUpdatedAt(LocalDateTime.now());
-        job.setUserId((Integer) request.getSession().getAttribute("userId"));
+        job.setUserId(Integer.parseInt((String) request.getSession().getAttribute("userId")));
         job.setStatus("ongoing");
         if(jobsService.addJobs(job)){
             return new GeneralDataResponseDTO<>(200, "添加成功");

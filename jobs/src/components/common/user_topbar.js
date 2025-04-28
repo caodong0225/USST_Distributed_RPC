@@ -61,28 +61,6 @@ export default function UserTopbar({}) {
             });
     };
 
-    const extraDropdown = [
-        {
-            type: "divider",
-        },
-        {
-            label: "用户管理",
-            key: "user_manage",
-            icon: <UsergroupAddOutlined/>,
-            onClick: () => {
-                router.push("/m/user/manage");
-            },
-        },
-        {
-            label: "内容管理",
-            key: "content_manage",
-            icon: <FileTextOutlined/>,
-            onClick: () => {
-                router.push("/m/content/manage");
-            },
-        },
-    ];
-
     let userDropdown = [
         {
             label: "个人主页",
@@ -90,14 +68,6 @@ export default function UserTopbar({}) {
             icon: <HomeOutlined/>,
             onClick: () => {
                 router.push(`/m/user/${meData?.id}`);
-            },
-        },
-        {
-            label: "信息维护",
-            key: "profile",
-            icon: <IdcardOutlined/>,
-            onClick: () => {
-                router.push("/m/user/profile");
             },
         },
         {
@@ -115,15 +85,7 @@ export default function UserTopbar({}) {
     // 这里修改Menu权限
     useEffect(() => {
         if (meData) {
-            const renderDropdown = userRoleLevel >= 2
-                ? [
-                    userDropdown[0],
-                    userDropdown[1],
-                    ...extraDropdown,
-                    userDropdown[2],
-                    userDropdown[3],
-                ]
-                : userDropdown;
+            const renderDropdown = userDropdown;
 
             setMenuItem([
                 {

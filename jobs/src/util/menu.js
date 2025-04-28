@@ -12,69 +12,6 @@ export const PUBLIC_MENU = [
     href: "/m",
     icon: "",
   },
-  {
-    key: "problems",
-    label: "训练题库",
-    href: "/m/challenge",
-    icon: "",
-    children: [
-      {
-        key: "problems",
-        label: "题目编辑",
-        href: "/m/challenge/*",
-        icon: "",
-        hidden: true,
-      },
-    ],
-  },
-  {
-    key: "contest",
-    label: "竞赛",
-    href: "/m/competition",
-    icon: "",
-    children: [
-      {
-        key: "contest",
-        label: "竞赛编辑",
-        href: "/m/competition/*",
-        icon: "",
-        hidden: true,
-      },
-    ],
-  },
-  {
-    key: "discussion",
-    label: "讨论",
-    href: "/m/thread",
-    icon: "",
-    children: [
-      {
-        key: "discussion",
-        label: "讨论编辑",
-        href: "/m/thread/*",
-        icon: "",
-        hidden: true,
-      },
-    ],
-  },
-  {
-    key: "honor",
-    label: "荣誉展示",
-    href: "/m/honor",
-    icon: "",
-  },
-  {
-    key: "thanks",
-    label: "致谢",
-    href: "/m/thanks",
-    icon: "",
-  },
-  {
-    key: "guide",
-    label: "平台说明",
-    href: "/m/guide",
-    icon: "",
-  },
 ];
 
 // 通用递归查找

@@ -33,6 +33,6 @@ public class Jobs implements Serializable {
     private Integer userId;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    @Pattern(regexp = "^(pending|approved|rejected)$", message = "状态只能是 pending、approved 或 rejected")
+    @Pattern(regexp = "^(ongoing|finish)$", message = "状态只能是 ongoing 或 finish")
     private String status;
 }
